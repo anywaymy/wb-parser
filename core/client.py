@@ -21,22 +21,47 @@ class Client:
             'spp': 30
         }
 
-        response = requests.get(url, params=params, headers=self.headers)
+        try:
+            response = requests.get(url, params=params, headers=self.headers)
+            return response.json()
+        except Exception as e:
+            print(f"Ошибка запроса: {e}")
 
-        return response.json()
+    def parse_products(self, json_response) -> list:
+
+        if not json_response:
+            return []
+
+        products = json_response.get("products")
+        parsed_data = []
+
+        for item in products:
+
+            sizes = item.get("sizes", [{}])
+            price_data = sizes[0].get("price", {})
+
+            sale_price = price_data.get("product", 0) / 100
+
+            info = {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "brand": item.get("brand"),
+                "rating": item.get("reviewRating"),
+                "feedbacks": item.get("feedbacks"),
+                "price": sale_price,
+                "url": f"https://www.wildberries.ru/catalog/{item.get('id')}/detail.aspx"
+            }
+
+            parsed_data.append(info)
+
+        return parsed_data
 
 
 
-result = Client()
-response_json = result.get_request_result(query="пальто из натуральной шерсти")
-products = response_json.get("products")
+client = Client()
+json_response = client.get_request_result(query="пальто из натуральной шерсти")
+cleaned_data = client.parse_products(json_response)
 
+for product in cleaned_data:
+    print(f"Название: {product['name']} | Цена: {product['price']}")
 
-for item in products:
-    name = item.get("name")
-    brand = item.get("brand")
-    rating = item.get("reviewRating")
-    price_raw = item.get("sizes", [{}])[0].get("price", {}).get("product", 0)
-    price = price_raw / 100
-
-    print(f"Товар: {name} | Бренд: {brand} | Цена: {price} руб. | Рейтинг: {rating}")

@@ -2,7 +2,13 @@ import os
 import requests
 import pandas
 
+from pathlib import Path
+
 from typing import List, Dict, Any
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 
 class Client:
     def __init__(self):
@@ -79,11 +85,13 @@ class Client:
             data_frame = pandas.DataFrame(data)
             folder_name = "data"
 
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
+            main_dir = os.path.join(BASE_DIR, folder_name)
+
+            if not os.path.exists(main_dir):
+                os.makedirs(main_dir)
                 print(f"Папка '{folder_name}' была создана.")
 
-            full_path = os.path.join(folder_name, filename)
+            full_path = os.path.join(main_dir, filename)
 
             column_mapping = {
                 "id": "Артикул",

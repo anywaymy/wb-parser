@@ -1,11 +1,22 @@
+import logging
 import os
-import requests
-import pandas
-
 from pathlib import Path
+from typing import Any
 
-from typing import List, Dict, Any
+import pandas
+import requests
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("parser.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -18,8 +29,9 @@ class Client:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
         }
 
-    def get_request_result(self, *, query: str) -> dict:
-        url = f"https://search.wb.ru/exactmatch/ru/common/v4/search"
+    def get_request_result(self, *, query: str) -> dict[str, Any]:
+        url = "https://search.wb.ru/exactmatch/ru/common/v4/search"
+
         params = {
             'ab_new_nm_vectors': 'true',
             'appType': 1,
@@ -31,13 +43,17 @@ class Client:
             'spp': 30
         }
 
+        logger.info(f"Запуск поиска по запросу: '{query}'")
+
         try:
             response = requests.get(url, params=params, headers=self.headers)
+            logger.info(f"Запрос выполнен успешно. Статус: {response.status_code}")
             return response.json()
         except Exception as e:
-            print(f"Ошибка запроса: {e}")
+            logger.error(f"Ошибка запроса '{query}': {e}")
+            return {}
 
-    def parse_products(self, *, json_response) -> list:
+    def parse_products_with_details(self, *, json_response: dict[str, Any]) -> list:
 
         if not json_response:
             return []
@@ -65,20 +81,23 @@ class Client:
 
         return parsed_data
 
+    def get_product_details(self, articles: list[int]) -> None:
+        pass
+
     def filter_products(
             self,
-            data,
+            data: list[dict[str, Any]],
             *,
-            min_rating: float=4.5,
-            max_price: int =10000) -> list:
+            min_rating: float = 4.5,
+            max_price: int = 10000) -> list:
 
         filtered = [item for item in data if item.get('rating', 0) >= min_rating and item.get('price', 0) <= max_price]
 
         return filtered
 
-    def save_to_excel(self, data, *, filename: str = "data.wb_results.xlsx"):
+    def save_to_excel(self, data: list[dict[str, Any]], *, filename: str = "data.wb_results.xlsx") -> None:
         if not data:
-            print("Данные отсутствуют")
+            logger.warning("Данные отсутствуют")
             return
 
         try:
@@ -89,7 +108,7 @@ class Client:
 
             if not os.path.exists(main_dir):
                 os.makedirs(main_dir)
-                print(f"Папка '{folder_name}' была создана.")
+                logger.info(f"Папка '{folder_name}' была создана.")
 
             full_path = os.path.join(main_dir, filename)
 
@@ -105,18 +124,21 @@ class Client:
 
             data_frame = data_frame.rename(columns=column_mapping)
             data_frame.to_excel(full_path, index=False)
-            print(f"Успешно сохранено! Файл: {filename} | Строк: {len(data_frame)}")
+            logger.info(f"Файл {filename} успешно сохранен. Найдено: {len(data)}")
 
         except Exception as e:
-            print(f"Ошибка при сохранении в Excel: {e}")
+            logger.error(f"Ошибка при сохранении в Excel: {e}")
 
 
 if __name__ == "__main__":
     client = Client()
+
     json_response = client.get_request_result(query="пальто из натуральной шерсти")
-    cleaned_data = client.parse_products(json_response=json_response)
+    # items = json_response.get("products", {})
+    # articles = [item.get("id") for item in items]
+    # json_details = client.get_product_details(articles=articles)
+    # print(json_details)
+    cleaned_data = client.parse_products_with_details(json_response=json_response)
     filtered_data = client.filter_products(cleaned_data, min_rating=4.5, max_price=10000)
 
     client.save_to_excel(filtered_data, filename="filtered_data.xlsx")
-
-

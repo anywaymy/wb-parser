@@ -1,4 +1,8 @@
+import os
 import requests
+import pandas
+
+from typing import List, Dict, Any
 
 class Client:
     def __init__(self):
@@ -8,7 +12,7 @@ class Client:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
         }
 
-    def get_request_result(self, query):
+    def get_request_result(self, *, query: str) -> dict:
         url = f"https://search.wb.ru/exactmatch/ru/common/v4/search"
         params = {
             'ab_new_nm_vectors': 'true',
@@ -27,7 +31,7 @@ class Client:
         except Exception as e:
             print(f"Ошибка запроса: {e}")
 
-    def parse_products(self, json_response) -> list:
+    def parse_products(self, *, json_response) -> list:
 
         if not json_response:
             return []
@@ -38,16 +42,15 @@ class Client:
         for item in products:
 
             sizes = item.get("sizes", [{}])
-            price_data = sizes[0].get("price", {})
-
+            price_data = sizes[0].get("price", {}) if sizes else 0
             sale_price = price_data.get("product", 0) / 100
 
             info = {
                 "id": item.get("id"),
                 "name": item.get("name"),
                 "brand": item.get("brand"),
-                "rating": item.get("reviewRating"),
-                "feedbacks": item.get("feedbacks"),
+                "rating": item.get("reviewRating", 0),
+                "feedbacks": item.get("feedbacks", 0),
                 "price": sale_price,
                 "url": f"https://www.wildberries.ru/catalog/{item.get('id')}/detail.aspx"
             }
@@ -56,12 +59,56 @@ class Client:
 
         return parsed_data
 
+    def filter_products(
+            self,
+            data,
+            *,
+            min_rating: float=4.5,
+            max_price: int =10000) -> list:
+
+        filtered = [item for item in data if item.get('rating', 0) >= min_rating and item.get('price', 0) <= max_price]
+
+        return filtered
+
+    def save_to_excel(self, data, *, filename: str = "data.wb_results.xlsx"):
+        if not data:
+            print("Данные отсутствуют")
+            return
+
+        try:
+            data_frame = pandas.DataFrame(data)
+            folder_name = "data"
+
+            if not os.path.exists(folder_name):
+                os.makedirs(folder_name)
+                print(f"Папка '{folder_name}' была создана.")
+
+            full_path = os.path.join(folder_name, filename)
+
+            column_mapping = {
+                "id": "Артикул",
+                "name": "Название",
+                "brand": "Бренд",
+                "rating": "Рейтинг",
+                "feedbacks": "Отзывы",
+                "price": "Цена (руб)",
+                "url": "Ссылка"
+            }
+
+            data_frame = data_frame.rename(columns=column_mapping)
+            data_frame.to_excel(full_path, index=False)
+            print(f"Успешно сохранено! Файл: {filename} | Строк: {len(data_frame)}")
+
+        except Exception as e:
+            print(f"Ошибка при сохранении в Excel: {e}")
 
 
-client = Client()
-json_response = client.get_request_result(query="пальто из натуральной шерсти")
-cleaned_data = client.parse_products(json_response)
+if __name__ == "__main__":
+    client = Client()
+    json_response = client.get_request_result(query="пальто из натуральной шерсти")
+    cleaned_data = client.parse_products(json_response=json_response)
+    filtered_data = client.filter_products(cleaned_data, min_rating=4.5, max_price=10000)
 
-for product in cleaned_data:
-    print(f"Название: {product['name']} | Цена: {product['price']}")
+    client.save_to_excel(filtered_data, filename="filtered_data.xlsx")
+
 

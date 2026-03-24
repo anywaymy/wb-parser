@@ -5,6 +5,7 @@ from typing import Any
 
 import pandas
 import requests
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 """
     При Реализации ТЗ возникли проблемы к доступу детальной информации карточек товаров.
@@ -13,7 +14,7 @@ import requests
     По сути браузер сам по этим ссылкам отдаёт данные в json формате, но через request, curl_cffi и playwright не даёт зайти.
     Вот 2 апи, которые отдают данные:
     1) https://www.wildberries.ru/__internal/u-card/cards/v4/detail?appType=1&curr=rub&dest=-1257786&spp=30&hide_vflags=4294967296&ab_testing=false&lang=ru&nm=544988737;741445719;733139850;771425157;778624696;825019950;749357735;749357736;544988739;544988738
-    2) https://www.wildberries.ru/__internal/u-card/cards/v4/detail?appType=1&curr=rub&dest=-1257786&spp=30&hide_vflags=4294967296&ab_testing=false&lang=ru&nm=749357735    
+    2) https://www.wildberries.ru/__internal/u-card/cards/v4/detail?appType=1&curr=rub&dest=-1257786&spp=30&hide_vflags=4294967296&ab_testing=false&lang=ru&nm=749357735
 """
 
 
@@ -39,6 +40,10 @@ class Client:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36',
         }
 
+    @retry(stop=stop_after_attempt(3),
+           wait=wait_exponential(multiplier=1, min=2, max=10),
+           before_sleep=lambda retry_state: logger.warning(f"Попытка №{retry_state.attempt_number} не удалась. Пробую еще раз")
+           )
     def get_request_result(self, *, query: str) -> dict[str, Any]:
         url = "https://search.wb.ru/exactmatch/ru/common/v4/search"
 
@@ -55,16 +60,14 @@ class Client:
 
         logger.info(f"Запуск поиска по запросу: '{query}'")
 
-        try:
-            response = requests.get(url, params=params, headers=self.headers)
-            logger.info(f"Запрос выполнен успешно. Статус: {response.status_code}")
-            return response.json()
-        except Exception as e:
-            logger.error(f"Ошибка запроса '{query}': {e}")
-            return {}
+        response = requests.get(url, params=params, headers=self.headers, timeout=10)
+        response.raise_for_status()
+
+        logger.info(f"Запрос выполнен успешно. Статус: {response.status_code}")
+
+        return response.json()
 
     def parse_products_with_details(self, *, json_response: dict[str, Any]) -> list:
-
         if not json_response:
             return []
 
@@ -142,13 +145,15 @@ class Client:
 
 if __name__ == "__main__":
     client = Client()
+    try:
+        json_response = client.get_request_result(query="пальто из натуральной шерсти")
+        # items = json_response.get("products", {})
+        # articles = [item.get("id") for item in items]
+        # json_details = client.get_product_details(articles=articles)
+        # print(json_details)
+        cleaned_data = client.parse_products_with_details(json_response=json_response)
+        filtered_data = client.filter_products(cleaned_data, min_rating=4.5, max_price=10000)
 
-    json_response = client.get_request_result(query="пальто из натуральной шерсти")
-    # items = json_response.get("products", {})
-    # articles = [item.get("id") for item in items]
-    # json_details = client.get_product_details(articles=articles)
-    # print(json_details)
-    cleaned_data = client.parse_products_with_details(json_response=json_response)
-    filtered_data = client.filter_products(cleaned_data, min_rating=4.5, max_price=10000)
-
-    client.save_to_excel(filtered_data, filename="filtered_data.xlsx")
+        client.save_to_excel(filtered_data, filename="filtered_data.xlsx")
+    except Exception as e:
+        logger.error(f"Ошибка при получении данных: {e}")

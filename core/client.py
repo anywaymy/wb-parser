@@ -7,16 +7,6 @@ import pandas
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-"""
-    При Реализации ТЗ возникли проблемы к доступу детальной информации карточек товаров.
-    Как мог с ними боролся, пробовал разные способы, но у вб стоит защита.
-    Пытался через апи, хотел спарсить саму html страницу и тд, но вб просто не даёт прохода.
-    По сути браузер сам по этим ссылкам отдаёт данные в json формате, но через request, curl_cffi и playwright не даёт зайти.
-    Вот 2 апи, которые отдают данные:
-    1) https://www.wildberries.ru/__internal/u-card/cards/v4/detail?appType=1&curr=rub&dest=-1257786&spp=30&hide_vflags=4294967296&ab_testing=false&lang=ru&nm=544988737;741445719;733139850;771425157;778624696;825019950;749357735;749357736;544988739;544988738
-    2) https://www.wildberries.ru/__internal/u-card/cards/v4/detail?appType=1&curr=rub&dest=-1257786&spp=30&hide_vflags=4294967296&ab_testing=false&lang=ru&nm=749357735
-"""
-
 
 logging.basicConfig(
     level=logging.INFO,
